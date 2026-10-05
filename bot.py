@@ -8,8 +8,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# التوكن الكامل والصحيح
-TELEGRAM_BOT_TOKEN = "8963061526:AAGm3uYv93lvKSPo7GkT2g1sXRdskJlFIYY"
+# التوكن الجديد الخاص بك حصرياً
+TELEGRAM_BOT_TOKEN = "8963061526:AAE-JPPaHLMinERJauNd6SDykdMUvyFsY_U"
 
 # سيرفر صغير باش Render يعرف بلي البوت شغال وما يعطيش Deploy Failed
 app_web = Flask('')
@@ -70,7 +70,7 @@ def analyze_token(ca: str) -> str:
         if score >= 75:
             verdict = "🚀 **STRONG BUY / FLY POTENTIAL**"
         elif score >= 50:
-            verdict = "⚠️️ **SPECULATIVE / WATCH CLOSELY**"
+            verdict = "⚠️ **SPECULATIVE / WATCH CLOSELY**"
         else:
             verdict = "🛑 **AVOID / HIGH RISK**"
             
