@@ -3,31 +3,28 @@ import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-# التوكن يتم جلبه تلقائياً من متغيرات البيئة في Render
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 
 def check_rugcheck_security(mint_address: str):
-    """فحص أمان العقد عبر RugCheck API"""
+    """فحص أمان العقد عبر RugCheck API مع الترويسات لتفادي الحظر"""
     url = f"https://api.rugcheck.xyz/v1/tokens/{mint_address}/report/summary"
+    headers = {'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)'}
     try:
-        response = requests.get(url, timeout=8)
+        response = requests.get(url, headers=headers, timeout=8)
         if response.status_code == 200:
             data = response.json()
-            score = data.get("score", 0) # كلما كان الرقم أقل كلما كان آمن أكثر
+            score = data.get("score", 0)
             risks = data.get("risks", [])
             
-            risk_list = []
-            for r in risks:
-                risk_list.append(f"• {r.get('name', 'Risk')}: {r.get('level', 'Warning')}")
-            
-            is_safe = score < 1500  # معيار الأمان في RugCheck
+            risk_list = [f"• {r.get('name', 'Risk')}: {r.get('level', 'Warning')}" for r in risks]
+            is_safe = score < 1500
             return is_safe, score, risk_list
     except Exception as e:
         print(f"RugCheck Error: {e}")
-    return True, 0, ["تعذر جلب تفاصيل الأمان المتقدمة"]
+    return True, 0, ["تعذر جلب بيانات الأمان من RugCheck"]
 
 def analyze_solana_token(mint_address: str):
-    """تحليل العقد عبر DexScreener مع ربطه بفحص الأمان"""
+    """تحليل العقد عبر DexScreener و RugCheck"""
     url = f"https://api.dexscreener.com/latest/dex/tokens/{mint_address}"
     try:
         response = requests.get(url, timeout=10)
@@ -39,7 +36,6 @@ def analyze_solana_token(mint_address: str):
         if not pairs:
             return "❌ العقد غير موجود أو لا توجد له سيولة متداولة حالياً."
         
-        # اختيار الزوج الأساسي للعملة على سولانا
         pair = pairs[0]
         base_token = pair.get("baseToken", {}).get("name", "Unknown")
         symbol = pair.get("baseToken", {}).get("symbol", "TOKEN")
@@ -49,27 +45,25 @@ def analyze_solana_token(mint_address: str):
         volume_m5 = float(pair.get("volume", {}).get("m5", 0))
         price_change_m5 = float(pair.get("priceChange", {}).get("m5", 0))
 
-        # 1. فحص الأمان عبر RugCheck
+        # 1. فحص الأمان
         is_safe, rug_score, risk_list = check_rugcheck_security(mint_address)
 
-        # 2. خوارزمية التقييم والتحليل الذكي
-        score = 50 # نقطة الانطلاق
+        # 2. تقييم المخاطر
+        score = 50
         warnings = []
         status_flag = "🟢 فرصة محتملة"
 
-        # فحص فخ القمة (Trap / Fake Pump)
         liq_ratio = (liquidity / fdv * 100) if fdv > 0 else 0
         if liq_ratio < 2.0 and fdv > 100000:
             score -= 30
-            warnings.append("⚠️ **تنبيه قمة وهمية:** السيولة ضعيفة جداً مقارنة بالقيمة السوقية (احتمال تصريف كبير).")
+            warnings.append("⚠️ **تنبيه قمة وهمية:** السيولة ضعيفة جداً مقارنة بالمحتوى (احتمال تصريف).")
             status_flag = "🔴 خطر قمة (Top Trap)"
 
         if price_change_m5 > 80 and volume_m5 > liquidity:
             score -= 20
-            warnings.append("⚠️ **انتبه:** العملة في قمة شمعة صعودية حادة، الدخول الآن يعتبر FOMO عالي المخاطر.")
+            warnings.append("⚠️ **انتبه:** صعود حاد جداً، الدخول الآن يعتبر FOMO عالي المخاطر.")
             status_flag = "🟠 دخول متأخر"
 
-        # نقاط الأمان والسيولة
         if liquidity > 30000:
             score += 20
         elif liquidity < 5000:
@@ -82,10 +76,8 @@ def analyze_solana_token(mint_address: str):
             score -= 40
             status_flag = "🚨 HIGH RUG RISK"
 
-        # ضمان حدود النتيجة بين 0 و 100
         final_score = max(0, min(100, score))
 
-        # تنسيق التقرير الموجه للمستخدم
         risks_text = "\n".join(risk_list[:3]) if risk_list else "لا توجد مخاطر حرجة مجدولة."
         warnings_text = "\n".join(warnings) if warnings else "لا توجد تحذيرات هيكلية حادة."
 
@@ -100,7 +92,7 @@ def analyze_solana_token(mint_address: str):
             f"💸 **الفوليوم (5 دقائق):** `${volume_m5:,.0f}`\n\n"
             f"🛡️ **فحص الأمان (RugCheck):**\n"
             f"{risks_text}\n\n"
-            f"⚠️ **التحليل والاستراتيجية:**\n"
+            f"⚠️️ **التحليل والاستراتيجية:**\n"
             f"{warnings_text}\n"
             f"━━━━━━━━━━━━━━━━━━━"
         )
@@ -112,16 +104,14 @@ def analyze_solana_token(mint_address: str):
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         "مرحباً بك في **Solana Scalper Bot v2.0** 🚀\n\n"
-        "البوت المطور المخصص لكشف الثغرات والقمم الوهمية.\n"
-        "أرسل لي **عقد العملة (CA)** لتحليله وفحصه فوراً."
+        "أرسل لي **عقد العملة (CA)** لتحليله وفحصه تلقائياً."
     )
     await update.message.reply_text(welcome_text, parse_mode="Markdown")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    # التحقق من أن النص يشبه عقد سولانا (بين 32 و 44 حرف)
     if len(text) >= 32 and len(text) <= 44 and not text.startswith("/"):
-        await update.message.reply_text("⏳ جاري فحص الأمان والسيولة عبر RugCheck و DexScreener...")
+        await update.message.reply_text("⏳ جاري الفحص المتقدم للأمان والسيولة...")
         report = analyze_solana_token(text)
         await update.message.reply_text(report, parse_mode="Markdown")
     else:
