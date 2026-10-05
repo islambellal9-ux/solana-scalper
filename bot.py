@@ -1,12 +1,26 @@
+import os
 import logging
 import requests
+from threading import Thread
+from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# ضع الـ Token الجديد هنا
-TELEGRAM_BOT_TOKEN = "8963061526:AAGm3uYv93lvKSPo7GkT2g1s..."
+# التوكن الكامل والصحيح
+TELEGRAM_BOT_TOKEN = "8963061526:AAGm3uYv93lvKSPo7GkT2g1sXRdskJlFIYY"
+
+# سيرفر صغير باش Render يعرف بلي البوت شغال وما يعطيش Deploy Failed
+app_web = Flask('')
+
+@app_web.route('/')
+def home():
+    return "Bot is running live!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    app_web.run(host='0.0.0.0', port=port)
 
 def analyze_token(ca: str) -> str:
     url = f"https://api.dexscreener.com/latest/dex/tokens/{ca}"
@@ -51,12 +65,12 @@ def analyze_token(ca: str) -> str:
             score += 30
             reasons.append(f"🟢 السعر صاعد (+{price_change_5m:.1f}% في 5m)")
         else:
-            reasons.append(f"🔴 السعر نازل ({price_change_5m:.1f}% in 5m)")
+            reasons.append(f"🔴 السعر نازل ({price_change_5m:.1f}% في 5m)")
             
         if score >= 75:
             verdict = "🚀 **STRONG BUY / FLY POTENTIAL**"
         elif score >= 50:
-            verdict = "⚠️ **SPECULATIVE / WATCH CLOSELY**"
+            verdict = "⚠️️ **SPECULATIVE / WATCH CLOSELY**"
         else:
             verdict = "🛑 **AVOID / HIGH RISK**"
             
@@ -88,6 +102,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("أهلاً إسلام! ابعثلي العقد (CA) تاع العملة وراح نعطيك قرار فوري.")
 
 if __name__ == '__main__':
+    Thread(target=run_flask).start()
+    
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
